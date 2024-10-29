@@ -1,0 +1,159 @@
+#include <Wire.h>
+#include <Adafruit_Sensor.h>
+#include <Adafruit_BMP280.h>
+#include <DHT.h>
+#include <WiFi.h>
+#include <HTTPClient.h>
+
+// Inicializa o BMP280
+Adafruit_BMP280 bmp; // I2C
+
+// Configurações do DHT11
+#define DHTPIN 26      // Pino onde o DHT11 está conectado
+#define DHTTYPE DHT11  // Definindo o tipo de sensor DHT
+DHT dht(DHTPIN, DHTTYPE); // Inicializa o DHT
+
+// Configurações do LDR
+#define LDRPIN 34 // Pino onde o LDR está conectado
+
+// Configurações do WiFi
+const char* ssid = "S23FE"; // Substitua pelo seu SSID
+const char* password = "142536yata"; // Substitua pela sua senha
+
+// Configurações da API do OpenWeather
+String apiKey = "6fc852705e40b0ff6798b4b8d7814051"; // Sua chave API
+String city = "curitiba"; // Cidade para obter os dados do tempo
+String url = "https://api.openweathermap.org/data/2.5/weather?q=" + city + "&units=metric&appid=" + apiKey;
+
+void setup() {
+    Serial.begin(115200);
+
+    // Inicializa o I2C com os pinos D33 (SDA) e D25 (SCL)
+    Wire.begin(33, 25); // SDA no pino D33 e SCL no pino D25
+
+    // Inicializa o BMP280
+    if (!bmp.begin(0x76)) {  // Use 0x76 para o endereço padrão, ou 0x77 se não funcionar
+        Serial.println("Erro ao encontrar o BMP280. Verifique as conexões!");
+        while (1); // Para o programa aqui se o sensor não for encontrado
+    }
+    Serial.println("BMP280 encontrado!");
+
+    // Inicializa o DHT11
+    dht.begin();
+
+    // Conecta ao WiFi
+    WiFi.begin(ssid, password);
+    while (WiFi.status() != WL_CONNECTED) {
+        delay(1000);
+        Serial.println("Conectando-se ao WiFi...");
+    }
+    Serial.println("Conectado!");
+}
+
+void loop() {
+    // Lê dados do BMP280
+    float bmpTemperature = bmp.readTemperature(); // Lê a temperatura
+    float pressure = bmp.readPressure() / 100.0F; // Lê a pressão em hPa
+    Serial.print("Temperatura BMP280: ");
+    Serial.print(bmpTemperature);
+    Serial.print(" °C, Pressão: ");
+    Serial.print(pressure);
+    Serial.println(" hPa");
+
+    // Lê dados do DHT11
+    float dhtTemperature = dht.readTemperature(); // Lê a temperatura do DHT11
+    float humidity = dht.readHumidity(); // Lê a umidade do DHT11
+    Serial.print("Temperatura DHT11: ");
+    Serial.print(dhtTemperature);
+    Serial.print(" °C, Umidade: ");
+    Serial.print(humidity);
+    Serial.println(" %");
+
+    // Lê dados do LDR
+    int ldrValue = analogRead(LDRPIN); // Lê o valor do LDR
+    Serial.print("LDR: ");
+    Serial.println(ldrValue);
+
+    // Obtém os dados do OpenWeather
+    String payload = getWeatherData();
+    if (payload.length() > 0) {
+        // Extrai umidade da API
+        String weatherHumidity = extractValue(payload, "\"humidity\":");
+        float weatherHumidityValue = weatherHumidity.toFloat();
+
+        // Calcula a probabilidade de chuva
+        int rainProbability = calculateRainProbability(weatherHumidityValue, pressure);
+        Serial.print("Probabilidade de chuva: ");
+        Serial.print(rainProbability);
+        Serial.println("%");
+
+        // Envia dados para o Firebase
+        sendDataToFirebase(bmpTemperature, pressure, humidity, dhtTemperature, ldrValue, rainProbability);
+    }
+
+    delay(60000); // Aguarda 1 minuto antes da próxima leitura
+}
+
+String getWeatherData() {
+    HTTPClient http;
+    http.begin(url);
+    int httpCode = http.GET();
+    String payload = "";
+
+    if (httpCode > 0) {
+        payload = http.getString();
+        Serial.println(payload);
+    } else {
+        Serial.println("Erro na requisição: " + String(httpCode));
+    }
+
+    http.end();
+    return payload;
+}
+
+String extractValue(String json, String key) {
+    int startIndex = json.indexOf(key) + key.length(); // Encontrar o início do valor
+    int endIndex = json.indexOf(",", startIndex);
+    if (endIndex == -1) { // Último elemento
+        endIndex = json.indexOf("}", startIndex);
+    }
+    return json.substring(startIndex, endIndex);
+}
+
+int calculateRainProbability(float humidity, float pressure) {
+    // Um cálculo simples para estimar a probabilidade de chuva
+    int probability = 0;
+
+    if (humidity > 75 && pressure < 1013) { // Exemplo de condições
+        probability = map(humidity, 75, 100, 50, 100); // Mais umidade -> maior chance de chuva
+    } else if (humidity > 50 && pressure < 1015) {
+        probability = map(humidity, 50, 75, 25, 50); // Condições moderadas
+    } else {
+        probability = 0; // Menos chance de chuva
+    }
+
+    return probability;
+}
+void sendDataToFirebase(float bmpTemp, float pressure, float humidity, float dhtTemp, int ldrValue, int rainProbability) {
+    // Formatar o JSON e enviar para o Firebase
+    String firebaseUrl = "https://esp32---iot-default-rtdb.firebaseio.com/weather.json";
+    String jsonData = "{\"Temperatura_BPM280\":\"" + String(bmpTemp) + "°C\"," +
+                      "\"Pressão_BPM280\":\"" + String(pressure) + " hPa\"," +
+                      "\"Humidade_DHT11\":\"" + String(humidity) + "%\"," +
+                      "\"Temperatura_DHT11\":\"" + String(dhtTemp) + "°C\"," +
+                      "\"Intensidade_LDR\":\"" + String(ldrValue) + " (bruto)\"," +
+                      "\"probabilidade_de_chuva\":\"" + String(rainProbability) + "%\"}";
+
+    HTTPClient http;
+    http.begin(firebaseUrl);
+    http.addHeader("Content-Type", "application/json");
+
+    int httpCode = http.POST(jsonData);
+    if (httpCode > 0) {
+        Serial.println("Dados enviados para o Firebase: " + jsonData);
+    } else {
+        Serial.println("Erro ao enviar dados: " + String(httpCode));
+    }
+
+    http.end();
+}
