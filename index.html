@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dados do Sensor</title>
+    <script src="https://www.gstatic.com/firebasejs/9.15.0/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.15.0/firebase-database.js"></script>
+</head>
+<body>
+    <h1>Dados dos Sensores</h1>
+    <div id="sensor-data">
+        <p><strong>Temperatura BMP280:</strong> <span id="Temperatura_BPM280"></span></p>
+        <p><strong>Pressão BMP280:</strong> <span id="Pressão_BPM280"></span></p>
+        <p><strong>Umidade DHT11:</strong> <span id="Humidade_DHT11"></span></p>
+        <p><strong>Temperatura DHT11:</strong> <span id="Temperatura_DHT11"></span></p>
+        <p><strong>Intensidade LDR:</strong> <span id="Intensidade_LDR"></span></p>
+        <p><strong>Probabilidade de Chuva:</strong> <span id="Probabilidade_de_chuva"></span></p>
+    </div>
+
+    <h2>Controle do LED</h2>
+    <button id="ledOn">Ligar LED</button>
+    <button id="ledOff">Desligar LED</button>
+
+    <h2>Pesquisa de Dados</h2>
+    <input type="date" id="searchDate" placeholder="Escolha uma data" />
+    <button id="searchButton">Buscar Dados</button>
+    <div id="searchResult"></div>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js";
+        import { getDatabase, ref, onValue, set, query, orderByChild, equalTo } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-database.js";
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyDCs64YYscSKBEl8ca-zgFLKi1B_qZTZrg",
+            authDomain: "esp32---iot.firebaseapp.com",
+            databaseURL: "https://esp32---iot-default-rtdb.firebaseio.com",
+            projectId: "esp32---iot",
+            storageBucket: "esp32---iot.appspot.com",
+            messagingSenderId: "55784316003",
+            appId: "1:55784316003:web:1e63146b65e8eecad9ec56",
+            measurementId: "G-BBV85QW931"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const database = getDatabase(app);
+
+        function fetchSensorData() {
+            const refData = ref(database, 'Dados_ESP32/Dados/Medidas');
+            onValue(refData, (snapshot) => {
+                const data = snapshot.val();
+                if (data) {
+                    document.getElementById('Temperatura_BPM280').innerText = data.Temperatura_BPM280 || "N/A";
+                    document.getElementById('Pressão_BPM280').innerText = data.Pressão_BPM280 || "N/A";
+                    document.getElementById('Humidade_DHT11').innerText = data.Humidade_DHT11 || "N/A";
+                    document.getElementById('Temperatura_DHT11').innerText = data.Temperatura_DHT11 || "N/A";
+                    document.getElementById('Intensidade_LDR').innerText = data.Intensidade_LDR || "N/A";
+                    document.getElementById('Probabilidade_de_chuva').innerText = data.Probabilidade_de_chuva || "N/A";
+                } else {
+                    console.log("Nenhum dado encontrado.");
+                }
+            });
+        }
+
+        function turnOnLed() {
+            set(ref(database, 'Dados_ESP32/Controle/LED'), "LED on")
+                .then(() => console.log("LED ligado."))
+                .catch((error) => console.error("Erro ao ligar o LED:", error));
+        }
+
+        function turnOffLed() {
+            set(ref(database, 'Dados_ESP32/Controle/LED'), "LED off")
+                .then(() => console.log("LED desligado."))
+                .catch((error) => console.error("Erro ao desligar o LED:", error));
+        }
+
+        function searchByDate() {
+            const selectedDate = document.getElementById('searchDate').value;
+            if (selectedDate) {
+                const refData = ref(database, 'Dados_ESP32/Dados/Medidas');
+                const dataQuery = query(refData, orderByChild('data'), equalTo(selectedDate));
+
+                onValue(dataQuery, (snapshot) => {
+                    const data = snapshot.val();
+                    const resultDiv = document.getElementById('searchResult');
+                    resultDiv.innerHTML = '';
+                    if (data) {
+                        for (const key in data) {
+                            const entry = data[key];
+                            resultDiv.innerHTML += `<p><strong>Data:</strong> ${entry.data} - <strong>Temperatura:</strong> ${entry.Temperatura_BPM280}°C, <strong>Pressão:</strong> ${entry.Pressão_BPM280} hPa, <strong>Umidade:</strong> ${entry.Humidade_DHT11}%, <strong>LDR:</strong> ${entry.Intensidade_LDR}</p>`;
+                        }
+                    } else {
+                        resultDiv.innerHTML = '<p>Nenhum dado encontrado para esta data.</p>';
+                    }
+                });
+            } else {
+                alert("Por favor, escolha uma data.");
+            }
+        }
+
+        document.getElementById('ledOn').addEventListener('click', turnOnLed);
+        document.getElementById('ledOff').addEventListener('click', turnOffLed);
+        document.getElementById('searchButton').addEventListener('click', searchByDate);
+
+        fetchSensorData();
+    </script>
+</body>
+</html>

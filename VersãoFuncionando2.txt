@@ -5,25 +5,19 @@
 #include <WiFi.h>
 #include <HTTPClient.h>
 
-// Inicializa o BMP280
-Adafruit_BMP280 bmp; // I2C
+Adafruit_BMP280 bmp;
 
-// Configurações do DHT11
 #define DHTPIN 26
 #define DHTTYPE DHT11
 DHT dht(DHTPIN, DHTTYPE);
 
-// Configurações do LDR
 #define LDRPIN 34
 
-// Configurações do LED
-#define LEDPIN 27 // Pino do LED
+#define LEDPIN 27
 
-// Configurações do WiFi
 const char* ssid = "S23FE";
 const char* password = "142536yata";
 
-// Configurações da API do OpenWeather
 String apiKey = "6fc852705e40b0ff6798b4b8d7814051";
 String city = "curitiba";
 String url = "https://api.openweathermap.org/data/2.5/weather?q=" + city + "&units=metric&appid=" + apiKey;
@@ -31,7 +25,7 @@ String url = "https://api.openweathermap.org/data/2.5/weather?q=" + city + "&uni
 void setup() {
     Serial.begin(115200);
     Wire.begin(33, 25);
-    pinMode(LEDPIN, OUTPUT); // Configura o pino do LED como saída
+    pinMode(LEDPIN, OUTPUT);
 
     if (!bmp.begin(0x76)) {
         Serial.println("Erro ao encontrar o BMP280. Verifique as conexões!");
@@ -44,10 +38,8 @@ void setup() {
 }
 
 void loop() {
-    // Função para verificar o estado do LED
     checkLedState();
 
-    // Lê dados dos sensores
     float bmpTemperature = bmp.readTemperature();
     float pressure = bmp.readPressure() / 100.0F;
     Serial.print("Temperatura BMP280: ");
@@ -68,7 +60,6 @@ void loop() {
     Serial.print("LDR: ");
     Serial.println(ldrValue);
 
-    // Obtém os dados do clima
     String payload = getWeatherData();
     if (payload.length() > 0) {
         String weatherHumidity = extractValue(payload, "\"humidity\":");
@@ -78,10 +69,9 @@ void loop() {
         Serial.print(rainProbability);
         Serial.println("%");
 
-        // Envia dados para o Firebase
         sendDataToFirebase(bmpTemperature, pressure, humidity, dhtTemperature, ldrValue, rainProbability);
     }
-    delay(60000); // Espera 60 segundos antes de repetir
+    delay(60000);
 }
 
 void connectToWiFi() {
@@ -147,7 +137,7 @@ void sendDataToFirebase(float bmpTemp, float pressure, float humidity, float dht
     http.begin(firebaseUrl);
     http.addHeader("Content-Type", "application/json");
 
-    int httpCode = http.PUT(jsonData); // Usando PUT para evitar IDs automáticos
+    int httpCode = http.PUT(jsonData);
     if (httpCode > 0) {
         Serial.println("Dados enviados para o Firebase: " + jsonData);
     } else {
@@ -165,17 +155,16 @@ void checkLedState() {
 
     if (httpCode > 0) {
         String ledState = http.getString();
-        ledState.trim(); // Remove espaços em branco
+        ledState.trim();
 
-        // Verifica o estado do LED com base nos valores corretos
         if (ledState == "\"LED on\"") {
-            digitalWrite(LEDPIN, HIGH); // Liga o LED
+            digitalWrite(LEDPIN, HIGH);
             Serial.println("LED ligado.");
         } else if (ledState == "\"LED off\"") {
-            digitalWrite(LEDPIN, LOW); // Desliga o LED
+            digitalWrite(LEDPIN, LOW);
             Serial.println("LED desligado.");
         } else {
-            Serial.println("Estado do LED inválido: " + ledState); // Para depuração
+            Serial.println("Estado do LED inválido: " + ledState);
         }
     } else {
         Serial.println("Erro ao verificar o estado do LED: " + String(httpCode));
