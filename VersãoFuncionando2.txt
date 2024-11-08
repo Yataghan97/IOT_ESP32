@@ -15,10 +15,10 @@ DHT dht(DHTPIN, DHTTYPE);
 
 #define LEDPIN 27
 
-const char* ssid = "S23FE";
-const char* password = "142536yata";
+const char* ssid = "";
+const char* password = "";
 
-String apiKey = "6fc852705e40b0ff6798b4b8d7814051";
+String apiKey = "";
 String city = "curitiba";
 String url = "https://api.openweathermap.org/data/2.5/weather?q=" + city + "&units=metric&appid=" + apiKey;
 
